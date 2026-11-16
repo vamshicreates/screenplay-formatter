@@ -30,10 +30,10 @@ def main():
     summary = []
     if pages: summary.append(("1. Every page read", pages["result"]))
     if fid: summary.append(("2. Every word kept (page by page)", fid["result"]))
-    for m, lab in (("te", "Telugu V1 lines"), ("full", "Telugu V2 lines")):
+    for m, lab in (("te", "Telugu V1 lines"), ("full", "Telugu V2/V3 lines")):
         t = load(d, f"telugu-{m}.json")
         if t: summary.append((f"3. {lab} complete & clean", t["result"]))
-    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2")):
+    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2"), ("v3", "Telugu V3")):
         o = load(d, f"output-{m}.json")
         if o: summary.append((f"4. Finished files complete ({lab})", o["result"]))
     rev = load(d, "review.json")
@@ -64,7 +64,7 @@ def main():
     if fid and fid["differences"]:
         L += ["WORD DIFFERENCES"] + [f"  {x}" for x in fid["differences"]] + [""]
 
-    for m, lab in (("te", "TELUGU V1 (dialogue)"), ("full", "TELUGU V2 (full)")):
+    for m, lab in (("te", "TELUGU V1 (dialogue)"), ("full", "TELUGU V2/V3 (full)")):
         t = load(d, f"telugu-{m}.json")
         if t:
             L.append(f"{lab}: {t['lines']} lines checked — {mark(t['result'])}")
@@ -73,7 +73,7 @@ def main():
             for r in dict.fromkeys(t["review"]):
                 L.append(f"  flag checked, OK: {r.split(' — sounds')[0]}")
             L.append("")
-    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2")):
+    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2"), ("v3", "Telugu V3")):
         o = load(d, f"output-{m}.json")
         if o:
             pg = o.get("pdf", {}).get("pages", "–")

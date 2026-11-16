@@ -27,6 +27,11 @@ Check, line by line against the original:
    Flag any word that was **translated** instead of transliterated (e.g. daddy → నాన్న is wrong; it should
    be డాడీ), any dropped or added word, misspellings of common Telugu words, wrong word breaks, and
    `(MISSING TELUGU)`. In full mode every non-character line needs Telugu. Character names stay English.
+6. **V3 (mode v3)**: same Telugu rules as full mode, **plus** every character must have a Telugu
+   `⇒ name:` (spoken spelling, e.g. KARTHIK → కార్తీక్), and lines marked `[V3: printed beside the next speech]`
+   must really lead into that speech (the action happening as it's said, or setting it up). A long or unrelated
+   action marked beside, or a short lead-in left on its own row where it clearly belongs to the speech,
+   is kind `v3-layout`.
 
 Only report real problems; matters of taste are not problems. Don't edit any files.
 Save your findings as JSON to **{OUT}**, as a list (an empty list `[]` if everything is right):
@@ -36,5 +41,5 @@ Save your findings as JSON to **{OUT}**, as a list (an empty list `[]` if everyt
 ```
 
 `kind` is one of: `missing`, `extra`, `wrong-type`, `wrong-speaker`, `heading`, `telugu-translated`,
-`telugu-spelling`, `telugu-missing`, `other`. Use `"element": null` for a missing line and say which
+`telugu-spelling`, `telugu-missing`, `v3-layout`, `other`. Use `"element": null` for a missing line and say which
 original page it's on. Then reply with one line: the number of findings.

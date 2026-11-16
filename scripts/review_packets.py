@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-check 4 (prep) — split the job into review packets for independent reviewers.
 
-Usage: review_packets.py <source.txt> <script.json> <checks/fidelity.json> <outdir> [--mode en|te|full] [--pages 12]
+Usage: review_packets.py <source.txt> <script.json> <checks/fidelity.json> <outdir> [--mode en|te|full|v3] [--pages 12]
 
 Each packet = a run of original pages (default 12) with:
   - the ORIGINAL text of those pages exactly as read from the file
@@ -32,11 +32,11 @@ def main():
         lines = [f"# Review packet {k}: original pages {start}–{end} of {n}  (mode: {mode})", ""]
         if start == 1 and doc.get("title_page"):
             tp = doc["title_page"]
-            lines += ["## Title page (formatted)", f"- title: {tp.get('title','')}" + (f"  ⇒  {tp.get('title_te','')}" if mode == 'full' else "")]
+            lines += ["## Title page (formatted)", f"- title: {tp.get('title','')}" + (f"  ⇒  {tp.get('title_te','')}" if mode in ('full', 'v3') else "")]
             for part in ("center", "contact"):
                 tes = tp.get(part + "_te") or []
                 for i, l in enumerate(tp.get(part, [])):
-                    lines.append(f"- {part}: {l}" + (f"  ⇒  {tes[i] if i < len(tes) else '(missing)'}" if mode == 'full' else ""))
+                    lines.append(f"- {part}: {l}" + (f"  ⇒  {tes[i] if i < len(tes) else '(missing)'}" if mode in ('full', 'v3') else ""))
             lines.append("")
         lines += ["## ORIGINAL (as read from the file)", ""]
         for p in range(start, end + 1):
@@ -48,9 +48,13 @@ def main():
             e = els[i]
             num = f" ({e['number']})" if e.get("number") else ""
             lines.append(f"#{i} [{e['type']}{num}] {e['text']}")
-            show_te = (mode == "full" and e["type"] != "character") or (mode in ("te", "full") and e["type"] == "dialogue")
+            show_te = (mode in ("full", "v3") and e["type"] != "character") or (mode in ("te", "full") and e["type"] == "dialogue")
             if show_te:
                 lines.append(f"    ⇒ {e.get('te', '(MISSING TELUGU)')}")
+            if mode == "v3" and e["type"] == "character":
+                lines.append(f"    ⇒ name: {doc.get('names_te', {}).get(e['text'], '(MISSING TELUGU NAME)')}")
+            if mode == "v3" and e.get("v3_beside"):
+                lines.append("    [V3: printed beside the next speech]")
         path = os.path.join(outdir, f"packet_{k:02d}.md")
         open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
         index.append({"packet": k, "file": path, "pages": [start, end], "elements": [idxs[0], idxs[-1]] if idxs else []})

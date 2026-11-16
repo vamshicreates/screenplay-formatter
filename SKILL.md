@@ -1,6 +1,6 @@
 ---
 name: "screenplay-formatter"
-description: "Reformat a film script from the user's folder into standard screenplay format (.docx + .pdf) without changing a word, cross-checked page by page with independent review; Telugu modes write the dialogue (V1) or the whole script (V2) in Telugu letters."
+description: "Reformat a film script from the user's folder into standard screenplay format (.docx + .pdf) without changing a word, cross-checked page by page with independent review; Telugu modes: dialogue (V1), whole script (V2), or the Telugu two-column crew layout (V3)."
 ---
 
 # Screenplay Formatter
@@ -9,7 +9,7 @@ The user points to a script file (PDF, DOCX, TXT or Fountain) in their Claude fo
 professional screenplay format. You produce a new version in industry-standard format, **with the
 writer's words exactly as they are**. You change format, never content.
 
-Three modes:
+Four modes:
 - **Standard** (default): formatted .docx + .pdf.
 - **Telugu V1 — dialogue only** (user asks for Telugu dialogue / Telugu letters / "version 1"): same,
   but every dialogue line written in Telugu script. This is a change of script, not a translation.
@@ -17,7 +17,13 @@ Three modes:
   "version 2"): title page, scene headings, action, parentheticals, transitions and dialogue all in
   Telugu letters, same words. Only the character names above dialogue stay English CAPS
   (KARTHIK, SUGUNA, and (CONT'D)/(V.O.) with them). Names inside action and dialogue go into Telugu letters.
-  If the user says just "Telugu" and it's unclear which, ask V1 or V2. If they don't mention Telugu,
+- **Telugu V3 — two-column crew layout** (user asks for "version 3", "V3", "two-column", "Telugu
+  format like our scripts"): the layout Telugu film crews use. Scene-heading bar in English, bold
+  (`4.INT    KARTHIK ROOM/HALL    -DAY/MORNING`); below it, action in Telugu letters in the left column and
+  `name :` + dialogue in the right columns. Character names are in **Telugu letters** too (`సుగుణ :`). An
+  action that leads into a speech sits beside it on the same row, and short tone notes (parentheticals) go
+  there too, without brackets. Same Telugu text as V2.
+  If the user says just "Telugu" and it's unclear which, ask V1, V2 or V3. If they don't mention Telugu,
   make the standard version only and offer the Telugu versions in one line.
 
 ## The golden rule: modify, don't rewrite
@@ -130,6 +136,15 @@ cp script.json script_full.json && python3 $SK/scripts/telugu.py merge script_fu
 python3 $SK/scripts/telugu.py check script_full.json --all --report checks/telugu-full.json
 ```
 The Telugu check also fails on broken letters (a vowel sign with no letter before it, which prints as ◌).
+
+**6c. Telugu V3 (two-column)**: start from `script_full.json` (do 6b first), then save `script_v3.json` with:
+- `"names_te"`: every character name in Telugu letters, spoken spelling (`{"KARTHIK": "కార్తీక్", "DANCE TEACHER": "డాన్స్ టీచర్"}`).
+- `"v3_beside": true` on each action that leads straight into the next speech: what the speaker is doing as
+  they say it, or a short lead-in naming them ("Ready avvutunna Karthik" → KARTHIK; "…gamanistunna SUGUNA" →
+  SUGUNA). Leave long scene-setting paragraphs and action unrelated to the next speaker on their own rows.
+  Parentheticals always go beside their speech automatically.
+- `python3 $SK/scripts/telugu.py check script_v3.json --all --report checks/telugu-full.json` (this also checks
+  `names_te`). The words are the same as V2, so no extra word check is needed.
 If V1 was already done, reuse its dialogue lines in `te_full.json` so both versions match.
 Scene headings: INT. → ఇంటీరియర్. · EXT. → ఎక్స్టీరియర్. · INT./EXT. → ఇంటీరియర్./ఎక్స్టీరియర్.; location and time as sounds
 (ROOM/HALL - DAY/MORNING → రూమ్/హాల్ - డే/మార్నింగ్). Transitions: CUT TO: → కట్ టు:, FADE IN: → ఫేడ్ ఇన్:. Fully English action
@@ -141,6 +156,7 @@ the scene numbers (4, 7A) as they are; they print in the margins. Phone numbers,
 python3 $SK/scripts/render.py script.json "out/<name> - formatted.docx" --pdf
 python3 $SK/scripts/render.py script_te.json "out/<name> - formatted (Telugu).docx" --telugu --pdf   # Telugu V1
 python3 $SK/scripts/render.py script_full.json "out/<name> - formatted (Full Telugu).docx" --telugu-full --pdf   # Telugu V2
+python3 $SK/scripts/render.py script_v3.json "out/<name> - formatted (V3).docx" --v3 --pdf   # Telugu V3
 ```
 `--no-scene-numbers` if the original had no scene numbers and the user doesn't want them (the
 renderer only prints numbers that exist in the JSON anyway).
@@ -150,15 +166,18 @@ renderer only prints numbers that exist in the JSON anyway).
 python3 $SK/scripts/check_output.py script.json "out/<name> - formatted.docx" --mode en --report checks/output-en.json
 python3 $SK/scripts/check_output.py script_te.json "out/<name> - formatted (Telugu).docx" --mode te --report checks/output-te.json
 python3 $SK/scripts/check_output.py script_full.json "out/<name> - formatted (Full Telugu).docx" --mode full --report checks/output-full.json
+python3 $SK/scripts/check_output.py script_v3.json "out/<name> - formatted (V3).docx" --mode v3 --report checks/output-v3.json
 ```
-It re-opens the .docx and compares it paragraph by paragraph with the JSON, then compares the PDF's letters
-with the .docx. A failure names the exact missing or changed paragraph. Re-render and re-check.
+It re-opens the .docx and compares it paragraph by paragraph (V3: row by row of the two-column table) with
+the JSON, then compares the PDF's letters with the .docx. A failure names the exact missing or changed
+paragraph or row. V3 also fails if any script line doesn't land in exactly one row, or a name has no Telugu.
+Re-render and re-check.
 
 **9. Independent review (cross-check 4).** Reviewers check your work without having seen it being done.
-- Make the packets from the richest version you produced (full Telugu > V1 > standard). That one review
+- Make the packets from the richest version you produced (V3 > full Telugu > V1 > standard). That one review
   covers the shared English text and dialogue of the others:
   ```bash
-  python3 $SK/scripts/review_packets.py source.txt <script_full.json|script_te.json|script.json> checks/fidelity.json review --mode <full|te|en> --pages 12
+  python3 $SK/scripts/review_packets.py source.txt <script_v3.json|script_full.json|script_te.json|script.json> checks/fidelity.json review --mode <v3|full|te|en> --pages 12
   ```
   Run `check_fidelity.py ... --report` first on that same JSON (it gives each element's page).
 - Spawn **one reviewer per packet, all at once**, with the Agent tool (`subagent_type: general-purpose`,
@@ -201,6 +220,12 @@ page or the first script page.
 
 Name, parenthetical and dialogue are never split across pages. Headings and names keep with the next line.
 
+**V3 (two-column):** US Letter, margins left 0.8", right 0.6", Arial 11 pt for English plus Noto Sans Telugu
+12 pt, 17 pt line pitch, page numbers top right ("3", no dot), no (CONT'D). Heading bar: bold, `4.INT` at the left,
+location centred, `-TIME` at the right. Body: a borderless 3-column table per scene — action 2.95" | `name :`
+1.3" right-aligned | dialogue the rest. A row never splits across pages, and `CUT TO:` (Telugu) sits at the bottom
+right of the scene's last row, so it can't be stranded on the next page.
+
 ## Telugu spelling rules (Tinglish → Telugu letters)
 
 - **Transliterate, never translate.** Each word is written as it is *spoken*, in Telugu script. English
@@ -220,6 +245,7 @@ Name, parenthetical and dialogue are never split across pages. Headings and name
 - Keep all punctuation, ellipses, `?`/`!` runs, quotes and digits exactly (500 stays 500).
 - Names: Karthik → కార్తీక్, Suguna → సుగుణ, Satyam → సత్యం (spoken spelling).
 - V1: only dialogue changes. Scene headings, action, character names (English CAPS) and parentheticals stay as they are.
+- V3: same Telugu text as V2, plus the character names in Telugu letters; scene headings stay English.
 - V2: everything changes except the character names above dialogue. The same rules apply to every line:
   same words, sounds not translation, standard spelling of the intended word, the writer's word boundaries,
   punctuation and digits unchanged (500rs → 500రూ).

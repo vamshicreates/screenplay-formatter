@@ -5,6 +5,8 @@ V1 (dialogue only):
   telugu.py export <script.json> <lines.json>       list every dialogue line (index, speaker, text)
   telugu.py merge  <script.json> <te.json>          te.json = {"<index>": "<Telugu text>", ...}; adds "te"
   telugu.py check  <script.json> [--report f.json]  validate the Telugu dialogue lines
+V3 (two-column layout) uses the V2 lines plus doc["names_te"] = {"KARTHIK": "కార్తీక్", ...};
+  `check --all` also validates names_te whenever it is present.
 V2 (full Telugu — everything except character names), add --all to each command:
   export --all lists every element except character cues, plus title-page lines with keys
   "tp.title", "tp.center.<n>", "tp.contact.<n>"; merge accepts those keys; check --all validates all.
@@ -122,6 +124,14 @@ def main():
                     ra, rr = skeleton(a), skeleton(rb)
                     if ra and rr and difflib.SequenceMatcher(a=ra, b=rr).ratio() < 0.5:
                         review.append(f"#{k}: “{a}” → “{b}” ({rb}) — sounds different, confirm it's a transliteration not a translation")
+        if full and "names_te" in doc:
+            for n in sorted({e["text"] for e in els if e["type"] == "character"}):
+                total += 1
+                v = doc["names_te"].get(n, "")
+                if not v or not TE.search(v):
+                    hard.append(f"name {n}: no Telugu in names_te")
+                elif LATIN.search(v) or ORPHAN.search(v):
+                    hard.append(f"name {n}: Latin letters or a broken letter in “{v}”")
         print(f"lines checked: {total} ({'full Telugu' if full else 'dialogue only'})")
         for h in hard:
             print("ERROR  " + h)

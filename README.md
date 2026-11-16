@@ -11,6 +11,7 @@ write the script in **Telugu letters**. That's transliteration, not translation.
 | **Standard** | Industry-standard screenplay format, original words |
 | **Telugu V1: dialogue only** | Same, with every dialogue line in Telugu letters (`Karthik ready aa?` → `కార్తీక్ రెడీ ఆ?`) |
 | **Telugu V2: full Telugu** | Everything in Telugu letters (title page, scene headings, action, parentheticals, transitions, dialogue). Only the character names above dialogue stay in English CAPS |
+| **Telugu V3: two-column crew layout** | The layout Telugu film crews use: an English scene-heading bar (`4.INT   KARTHIK ROOM/HALL   -DAY/MORNING`), action in Telugu on the left, `సుగుణ :` + dialogue on the right, and an action that leads into a speech printed beside it. Character names are in Telugu letters too |
 
 ---
 
@@ -22,6 +23,7 @@ Once the skill is installed (see below), just ask Claude in plain words:
 Format the script in my "True Love Ai Workflow" folder.
 Format sample script.pdf and give me the Telugu version 1.
 Format the script in <folder> in full Telugu (version 2).
+Make version 3 of the script in <folder>.
 ```
 
 Claude will:
@@ -104,6 +106,10 @@ US Letter · Courier New 12 pt (the PDF uses Courier Prime, same spacing) · 6 l
 | Dialogue | 2.5" – 6.0" | Telugu: Noto Sans Telugu 13 pt |
 | Transition | right-aligned | `CUT TO:` |
 
+**V3 two-column layout:** Arial + Noto Sans Telugu · bold heading bar `4.INT | LOCATION | -TIME` · borderless
+columns: action (2.95") | `name :` (1.3", right-aligned) | dialogue · rows never split across pages · `CUT TO:` kept
+with the scene's last row.
+
 A name, its parenthetical and its dialogue never split across pages. Page numbers go top right, with none on the title page or the first page of the script.
 
 ---
@@ -130,8 +136,8 @@ python3 $SK/scripts/report.py checks "my script - check report.txt"
 | `draft_parse.py` | Heuristic first pass → structured JSON (scene headings, cues, parentheticals, merges) |
 | `check_fidelity.py` | Cross-check 2: word-for-word check against the original, page by page, plus the order of speakers |
 | `telugu.py` | Export lines to write in Telugu, merge them back, check (no Latin left, same word count, no broken letters, sound-alike) |
-| `render.py` | JSON → screenplay .docx (+ .pdf through LibreOffice); `--telugu`, `--telugu-full` |
-| `check_output.py` | Cross-check 3: re-reads the finished .docx/.pdf against the JSON |
+| `render.py` | JSON → screenplay .docx (+ .pdf through LibreOffice); `--telugu`, `--telugu-full`, `--v3` |
+| `check_output.py` | Cross-check 3: re-reads the finished .docx/.pdf against the JSON (V3: row by row) |
 | `review_packets.py` | Cross-check 4 prep: splits the job into page batches for independent reviewers (`references/reviewer-prompt.md`) |
 | `report.py` | Builds the check report from `checks/*.json` |
 | `common.py` | Shared tokenising and alignment |
