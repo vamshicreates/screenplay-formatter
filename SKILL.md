@@ -136,6 +136,11 @@ cp script.json script_full.json && python3 $SK/scripts/telugu.py merge script_fu
 python3 $SK/scripts/telugu.py check script_full.json --all --report checks/telugu-full.json
 ```
 The Telugu check also fails on broken letters (a vowel sign with no letter before it, which prints as ◌).
+If V1 was already done, reuse its dialogue lines in `te_full.json` so both versions match.
+Scene headings: INT. → ఇంటీరియర్. · EXT. → ఎక్స్టీరియర్. · INT./EXT. → ఇంటీరియర్./ఎక్స్టీరియర్.; location and time as sounds
+(ROOM/HALL - DAY/MORNING → రూమ్/హాల్ - డే/మార్నింగ్). Transitions: CUT TO: → కట్ టు:, FADE IN: → ఫేడ్ ఇన్:. Fully English action
+sentences are written as sounds too ("while Satyam is feeding" → "వైల్ సత్యం ఈజ్ ఫీడింగ్"). Keep
+the scene numbers (4, 7A) as they are; they print in the margins. Phone numbers, emails and URLs on the title page stay as written.
 
 **6c. Telugu V3 (two-column)**: start from `script_full.json` (do 6b first), then save `script_v3.json` with:
 - `"names_te"`: every character name in Telugu letters, spoken spelling (`{"KARTHIK": "కార్తీక్", "DANCE TEACHER": "డాన్స్ టీచర్"}`).
@@ -145,11 +150,6 @@ The Telugu check also fails on broken letters (a vowel sign with no letter befor
   Parentheticals always go beside their speech automatically.
 - `python3 $SK/scripts/telugu.py check script_v3.json --all --report checks/telugu-full.json` (this also checks
   `names_te`). The words are the same as V2, so no extra word check is needed.
-If V1 was already done, reuse its dialogue lines in `te_full.json` so both versions match.
-Scene headings: INT. → ఇంటీరియర్. · EXT. → ఎక్స్టీరియర్. · INT./EXT. → ఇంటీరియర్./ఎక్స్టీరియర్.; location and time as sounds
-(ROOM/HALL - DAY/MORNING → రూమ్/హాల్ - డే/మార్నింగ్). Transitions: CUT TO: → కట్ టు:, FADE IN: → ఫేడ్ ఇన్:. Fully English action
-sentences are written as sounds too ("while Satyam is feeding" → "వైల్ సత్యం ఈజ్ ఫీడింగ్"). Keep
-the scene numbers (4, 7A) as they are; they print in the margins. Phone numbers, emails and URLs on the title page stay as written.
 
 **7. Render**
 ```bash
