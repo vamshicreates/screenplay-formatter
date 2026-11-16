@@ -1,91 +1,79 @@
 #!/usr/bin/env python3
-"""Word-level fidelity check: does script.json contain exactly the words of source.txt?
+"""Cross-check 2 — word-for-word fidelity, page by page.
 
-Usage: check_fidelity.py <source.txt> <script.json>
+Usage: check_fidelity.py <source.txt> <script.json> [--report checks/fidelity.json]
 
-Compares every word (case-insensitive, punctuation ignored) in reading order.
-Allowed format-only differences:
-  - dropped:  "scene" before a scene number in a heading (number moves to the margins)
-  - added:    "to" in transitions ("CUT" -> "CUT TO:")
-  - speaker cues are compared separately (their position relative to a moved
-    parenthetical may change, but the sequence of speakers must be identical).
-Exit code 0 = PASS, 1 = differences found (listed with context).
+Compares every word of the original (case and punctuation ignored) with script.json, in reading order.
+Allowed format-only differences: "scene" dropped before a scene number, "to" added in "CUT TO:".
+Speaker cues are compared as a separate sequence (a moved parenthetical may change their position).
+Prints a per-page table (every original page must be ✓) and lists each difference with its page.
+With --report, also writes each element's source page (used by review_packets.py).
+Exit 0 = PASS, 1 = differences found.
 """
-import json, re, sys, difflib
-
-PAGE_NUM = re.compile(r"^\s*\(?\d{1,3}\)?\s*\.?\s*$", re.M)
-TOK = re.compile(r"[a-z0-9]+")
-
-
-def toks(s):
-    return TOK.findall(s.lower().replace("’", "'").replace("'", ""))
+import json, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import source_tokens, output_tokens, align
+import difflib
 
 
 def main():
-    src = open(sys.argv[1], encoding="utf-8").read().replace("\f", "\n")
-    doc = json.load(open(sys.argv[2], encoding="utf-8"))
-    els = doc["elements"]
-    cues = []
-    for e in els:
-        if e["type"] == "character":
-            cues.append(e["text"].upper())
-    names = sorted(set(cues), key=len, reverse=True)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    report = sys.argv[sys.argv.index("--report") + 1] if "--report" in sys.argv else None
+    src_text = open(args[0], encoding="utf-8").read()
+    doc = json.load(open(args[1], encoding="utf-8"))
+    cues = [e["text"].upper() for e in doc["elements"] if e["type"] == "character"]
 
-    # --- source: drop page numbers, pull out speaker cues
-    src = PAGE_NUM.sub("", src)
-    src_cues = []
-    if names:
-        alt = "|".join(re.escape(n) for n in names)
-        cue_re = re.compile(rf"(?m)^[ \t]*({alt})[ \t]*(\((?:V\.?O\.?|O\.?S\.?|O\.?C\.?|CONT'?D)\))?[ \t]*(:|$)")
-        def grab(m):
-            src_cues.append(m.group(1).upper())
-            return " "
-        src = cue_re.sub(grab, src)
-    st = toks(src)
+    st, sp, src_cues, npages = source_tokens(src_text, cues)
+    ot, owner = output_tokens(doc)
+    problems, src_ok, out_map = align(st, ot)
 
-    # --- output tokens (cues excluded, scene numbers included)
-    ot = []
-    tp = doc.get("title_page") or {}
-    if tp:
-        for k in ("title",):
-            ot += toks(tp.get(k, ""))
-        for l in tp.get("center", []) + tp.get("contact", []):
-            ot += toks(l)
-    for e in els:
-        if e["type"] == "character":
-            continue
-        if e["type"] == "scene_heading" and e.get("number"):
-            ot += toks(e["number"])
-        ot += toks(e["text"])
-
-    problems = []
-    sm = difflib.SequenceMatcher(a=st, b=ot, autojunk=False)
-    for op, a1, a2, b1, b2 in sm.get_opcodes():
-        if op == "equal":
-            continue
+    # per-page coverage
+    pages = {}
+    for k, p in enumerate(sp):
+        d = pages.setdefault(p, {"page": p, "words": 0, "matched": 0, "issues": 0})
+        d["words"] += 1
+        d["matched"] += 1 if src_ok[k] else 0
+    lines = []
+    for op, a1, a2, b1, b2 in problems:
         gone, added = st[a1:a2], ot[b1:b2]
-        if op == "delete" and set(gone) <= {"scene"}:
-            continue
-        if op == "insert" and set(added) <= {"to"}:
-            continue
-        if op == "replace" and set(gone) <= {"scene"} and set(added) <= {"to"}:
-            continue
+        p = sp[min(a1, len(sp) - 1)] if sp else 1
+        pages.setdefault(p, {"page": p, "words": 0, "matched": 0, "issues": 0})["issues"] += 1
         ctx = " ".join(st[max(0, a1 - 6):a1])
-        problems.append(f"[{op}] after “…{ctx}”:  source={' '.join(gone) or '∅'}  →  output={' '.join(added) or '∅'}")
+        lines.append(f"page {p}: [{op}] after “…{ctx}”:  original={' '.join(gone) or '∅'}  →  output={' '.join(added) or '∅'}")
 
-    if src_cues != cues:
-        sm2 = difflib.SequenceMatcher(a=src_cues, b=cues, autojunk=False)
+    src_cue_names = [c for c, _ in src_cues]
+    if src_cue_names != cues:
+        sm2 = difflib.SequenceMatcher(a=src_cue_names, b=cues, autojunk=False)
         for op, a1, a2, b1, b2 in sm2.get_opcodes():
             if op != "equal":
-                problems.append(f"[speaker {op}] source cues {src_cues[a1:a2]} → output cues {cues[b1:b2]} (at cue #{a1+1})")
+                p = src_cues[min(a1, len(src_cues) - 1)][1] if src_cues else 1
+                pages.setdefault(p, {"page": p, "words": 0, "matched": 0, "issues": 0})["issues"] += 1
+                lines.append(f"page {p}: [speaker {op}] original {src_cue_names[a1:a2]} → output {cues[b1:b2]}")
 
-    print(f"source words: {len(st)}  output words: {len(ot)}  speakers: {len(src_cues)} vs {len(cues)}")
-    if problems:
-        print(f"FAIL — {len(problems)} difference(s):")
-        for p in problems:
-            print("  " + p)
-        sys.exit(1)
-    print("PASS — every word of the original is present, in order, and nothing was added.")
+    print(f"{'page':>5} {'words':>6} {'matched':>8}  status")
+    for p in sorted(pages):
+        d = pages[p]
+        d["ok"] = d["issues"] == 0 and d["matched"] == d["words"]
+        print(f"{p:>5} {d['words']:>6} {d['matched']:>8}  {'✓' if d['ok'] else '✗ ' + str(d['issues']) + ' issue(s)'}")
+    print(f"total: original {len(st)} words, output {len(ot)} words; speakers {len(src_cue_names)} vs {len(cues)}")
+
+    result = "FAIL" if lines else "PASS"
+    if lines:
+        print(f"FAIL — {len(lines)} difference(s):")
+        for l in lines:
+            print("  " + l)
+    else:
+        print("PASS — every word of every page is present, in order, and nothing was added.")
+
+    if report:
+        from common import element_pages
+        os.makedirs(os.path.dirname(report) or ".", exist_ok=True)
+        json.dump({"result": result, "source_words": len(st), "output_words": len(ot),
+                   "speakers": [len(src_cue_names), len(cues)],
+                   "pages": [pages[p] for p in sorted(pages)], "differences": lines,
+                   "element_pages": element_pages(doc, sp, owner, out_map)},
+                  open(report, "w"), ensure_ascii=False, indent=1)
+    sys.exit(1 if lines else 0)
 
 
 if __name__ == "__main__":

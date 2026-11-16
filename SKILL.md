@@ -1,6 +1,6 @@
 ---
 name: "screenplay-formatter"
-description: "Reformat a film script from the user's folder into standard screenplay format (.docx + .pdf) without changing a word; Telugu modes write the dialogue (V1) or the whole script (V2) in Telugu letters."
+description: "Reformat a film script from the user's folder into standard screenplay format (.docx + .pdf) without changing a word, cross-checked page by page with independent review; Telugu modes write the dialogue (V1) or the whole script (V2) in Telugu letters."
 ---
 
 # Screenplay Formatter
@@ -40,37 +40,60 @@ the notes for the user, unchanged in the script.
 
 ## Where the files live
 
-Helper scripts and fonts live next to this file (`scripts/`, `fonts/`). On the author's machine that is
-`~/Documents/Claude/skills/screenplay-formatter/` (a clone of github.com/vamshicreates/screenplay-formatter);
+Helper scripts and fonts live next to this file (`scripts/`, `fonts/`, `references/`). On the author's machine
+that is `~/Documents/Claude/skills/screenplay-formatter/` (a clone of github.com/vamshicreates/screenplay-formatter);
 use wherever the user cloned it.
-Run them in the cloud workspace (it has pdftotext, LibreOffice, python-docx):
+Run them in the cloud workspace (it has pdftotext, tesseract, LibreOffice, python-docx):
 
 1. `device_list_dir` the user's folder to find the script they named (ask only if it's truly ambiguous).
-2. `device_stage_files` the script file, every file in `skills/screenplay-formatter/scripts/`, and the 4
-   fonts in `skills/screenplay-formatter/fonts/`.
+2. `device_stage_files` the script file, every file in `skills/screenplay-formatter/scripts/`,
+   `references/reviewer-prompt.md`, and the 4 fonts in `skills/screenplay-formatter/fonts/`.
 3. Setup (once per session):
    ```bash
    SK=/mnt/user-data/uploads/Claude/skills/screenplay-formatter   # staged location
    mkdir -p ~/.fonts && cp $SK/fonts/*.ttf ~/.fonts/ && fc-cache -f
    pip install -q --break-system-packages indic_transliteration 2>/dev/null || true
-   mkdir -p ~/work && cd ~/work && cp "<staged script file>" .
+   mkdir -p ~/work/checks && cd ~/work && cp "<staged script file>" .
    ```
-   If the skill folder is missing on the user's computer, tell the user and stop — don't rebuild the
+   If the skill folder is missing on the user's computer, tell the user and stop. Don't rebuild the
    scripts from memory.
+
+## Cross-checks: nothing is delivered until all of them pass
+
+Long scripts are where pages and lines go missing, so every run has four cross-checks plus a report:
+
+| # | Check | Catches |
+|---|---|---|
+| 1 | `page_check.py`: every page of the original was read | scanned or image pages, blank pages, pages lost in extraction (OCR'd automatically) |
+| 2 | `check_fidelity.py`: every word, page by page | dropped, added, changed or reordered words; speeches out of order |
+| 3 | `check_output.py`: re-reads the finished .docx and .pdf | anything lost while making the files; Telugu missing from a line |
+| 4 | Independent reviewers (one per packet of pages) | wrong line types, wrong speaker, misplaced lines, translated or misspelled Telugu |
+| | `report.py` → `<name> - check report.txt` | a page-by-page ✓ table and every flag, fix and decision, delivered with the files |
+
+If a check fails, fix `script.json` (never the source) and run the checks again from step 4. Check 4 is skipped
+only when the user says "skip review" or "quick draft". In that case, say so in the report and the reply.
 
 ## Steps
 
-Make a task list: extract → draft → review → fidelity check → (Telugu) → render → look at pages → deliver.
+Make a task list: extract → page check → draft → review → word check → (Telugu) → render → file check
+→ independent review → report → look at pages → deliver.
 
 **1. Extract** — `python3 $SK/scripts/extract_text.py "<file>" source.txt`
-If it warns the PDF has almost no text (scanned), OCR it with the pdf skill first.
 
-**2. Draft** — `python3 $SK/scripts/draft_parse.py source.txt draft.json`
+**2. Page check (cross-check 1)** — `python3 $SK/scripts/page_check.py "<file>" source.txt --report checks/pages.json`
+- The PDF page count must equal the pages read. Scanned pages are OCR'd automatically, and the OCR text replaces
+  that page in `source.txt`. View every `OCR` page image (`pdftoppm -r 80 -png -f N -l N`) and correct the
+  OCR text in `source.txt` where it misread. OCR is English letters only.
+- `UNREAD` (an image page OCR couldn't read, e.g. Telugu-script or handwritten): view the page image and type
+  its text into that page of `source.txt` yourself, then re-run. It must PASS before you go on.
+- `LOW` / `blank`: view the page image and confirm it really has little or no text.
+
+**3. Draft** — `python3 $SK/scripts/draft_parse.py source.txt draft.json`
 (`--keep-case` if the user wants dialogue casing left as is.) This guesses each element's type.
 
-**3. Review (your judgement — the important step).** Read `source.txt` in full and view the PDF's pages
-(`pdftoppm -r 60 -png`) where the layout is unclear. Go through `draft.json` element by element
-and write `script.json`:
+**4. Review (your judgement, the important step).** Read `source.txt` in full and view the PDF's pages
+(`pdftoppm -r 60 -png`) where the layout is unclear. For long scripts, go through it in chunks of about
+10 pages so no page is skimmed. Go through `draft.json` element by element and write `script.json`:
 - Fix wrong types. A line written as `NAME: text` is a character + dialogue. A short all-caps line with
   deep indent followed by text is a cue in standard input.
 - Bracketed text: short (about ≤ 6 words), about how the *next* speaker talks or acts → parenthetical
@@ -86,33 +109,34 @@ and write `script.json`:
 - Set `"no_contd": true` on a character element only if (CONT'D) would be wrong (e.g. a new scene the
   renderer can't see).
 
-**4. Fidelity check** — `python3 $SK/scripts/check_fidelity.py source.txt script.json`
-Must print PASS. It compares every word in order (case and punctuation ignored) and the sequence of
-speakers. On FAIL, fix `script.json` (you dropped, added or changed a word) and re-run. Never edit
-the source to make it pass.
+**5. Word check (cross-check 2)** — `python3 $SK/scripts/check_fidelity.py source.txt script.json --report checks/fidelity.json`
+It must print PASS, with every page ✓. It compares every word in order (case and punctuation ignored)
+and the sequence of speakers, and names the page of each difference. On FAIL, fix `script.json` (you
+dropped, added or changed a word) and re-run. Never edit the source to make it pass.
 
-**5. Telugu mode only.**
+**6. Telugu V1 (dialogue only).**
 - `python3 $SK/scripts/telugu.py export script.json dialogue.json` and read it.
 - Write `te.json` (`{"<index>": "<Telugu>"}`) by the spelling rules below. For long scripts, do it in
   batches of about 60 lines.
 - `cp script.json script_te.json && python3 $SK/scripts/telugu.py merge script_te.json te.json`
-- `python3 $SK/scripts/telugu.py check script_te.json`: must PASS (no missing lines, no English letters
+- `python3 $SK/scripts/telugu.py check script_te.json --report checks/telugu-te.json`: must PASS (no missing lines, no English letters
   left). Look at each REVIEW item: word-count changes must only come from fixing an obvious typo,
   and "sounds different" items must be loanwords, not translations. Add each typo you corrected to `notes`.
 
-**5b. Telugu V2 (full Telugu)** — same three commands, each with `--all`, on `script_full.json`:
+**6b. Telugu V2 (full Telugu)** — same three commands, each with `--all`, on `script_full.json`:
 ```bash
 python3 $SK/scripts/telugu.py export script.json lines.json --all      # every element except character names, plus title page (keys tp.title, tp.center.N, tp.contact.N)
 cp script.json script_full.json && python3 $SK/scripts/telugu.py merge script_full.json te_full.json --all
-python3 $SK/scripts/telugu.py check script_full.json --all
+python3 $SK/scripts/telugu.py check script_full.json --all --report checks/telugu-full.json
 ```
+The Telugu check also fails on broken letters (a vowel sign with no letter before it, which prints as ◌).
 If V1 was already done, reuse its dialogue lines in `te_full.json` so both versions match.
 Scene headings: INT. → ఇంటీరియర్. · EXT. → ఎక్స్టీరియర్. · INT./EXT. → ఇంటీరియర్./ఎక్స్టీరియర్.; location and time as sounds
 (ROOM/HALL - DAY/MORNING → రూమ్/హాల్ - డే/మార్నింగ్). Transitions: CUT TO: → కట్ టు:, FADE IN: → ఫేడ్ ఇన్:. Fully English action
 sentences are written as sounds too ("while Satyam is feeding" → "వైల్ సత్యం ఈజ్ ఫీడింగ్"). Keep
 the scene numbers (4, 7A) as they are; they print in the margins. Phone numbers, emails and URLs on the title page stay as written.
 
-**6. Render**
+**7. Render**
 ```bash
 python3 $SK/scripts/render.py script.json "out/<name> - formatted.docx" --pdf
 python3 $SK/scripts/render.py script_te.json "out/<name> - formatted (Telugu).docx" --telugu --pdf   # Telugu V1
@@ -121,14 +145,44 @@ python3 $SK/scripts/render.py script_full.json "out/<name> - formatted (Full Tel
 `--no-scene-numbers` if the original had no scene numbers and the user doesn't want them (the
 renderer only prints numbers that exist in the JSON anyway).
 
-**7. Look at it.** `pdftoppm -r 70 -png` the PDF and view the title page plus a few script pages
+**8. Final-file check (cross-check 3)**, once for each version made:
+```bash
+python3 $SK/scripts/check_output.py script.json "out/<name> - formatted.docx" --mode en --report checks/output-en.json
+python3 $SK/scripts/check_output.py script_te.json "out/<name> - formatted (Telugu).docx" --mode te --report checks/output-te.json
+python3 $SK/scripts/check_output.py script_full.json "out/<name> - formatted (Full Telugu).docx" --mode full --report checks/output-full.json
+```
+It re-opens the .docx and compares it paragraph by paragraph with the JSON, then compares the PDF's letters
+with the .docx. A failure names the exact missing or changed paragraph. Re-render and re-check.
+
+**9. Independent review (cross-check 4).** Reviewers check your work without having seen it being done.
+- Make the packets from the richest version you produced (full Telugu > V1 > standard). That one review
+  covers the shared English text and dialogue of the others:
+  ```bash
+  python3 $SK/scripts/review_packets.py source.txt <script_full.json|script_te.json|script.json> checks/fidelity.json review --mode <full|te|en> --pages 12
+  ```
+  Run `check_fidelity.py ... --report` first on that same JSON (it gives each element's page).
+- Spawn **one reviewer per packet, all at once**, with the Agent tool (`subagent_type: general-purpose`,
+  `model: opus`; the reviewer seat never gets a cheaper model). Each reviewer's prompt is
+  `references/reviewer-prompt.md` with `{PACKET}`, `{MODE}` and `{OUT}` (= `review/findings_NN.json`) filled in.
+- For every finding: check it against the original yourself. Real problems get fixed in the JSON. Anything
+  else gets rejected with a one-line reason. Write `checks/review.json`:
+  `{"reviewers": N, "packets": ["pages 1–12", ...], "findings": [{...finding..., "action": "fixed"|"rejected", "note": "..."}]}`
+- If anything was fixed, re-run steps 5–8 for the affected versions. If a packet had more than about 5 real
+  problems, give that packet to a fresh reviewer once more.
+
+**10. Report** — `python3 $SK/scripts/report.py checks "out/<name> - check report.txt" --title "<name>"`
+OVERALL must say ALL CHECKS PASSED. If something truly can't pass (e.g. a page is unreadable even to
+you), deliver anyway, but say so plainly at the top of your reply and in the report.
+
+**11. Look at it.** `pdftoppm -r 70 -png` the PDF and view the title page plus a few script pages
 (more for long scripts: first, middle, last). Check indents, that names and dialogue stay together,
 that headings aren't stranded at page bottoms, and in Telugu that letters join properly (no dotted
 circles ◌). Fix and re-render if needed.
 
-**8. Deliver.** Write the files next to the original with `device_commit_files` (never overwrite the
-original), e.g. `True Love Ai Workflow/sample script - formatted.pdf`. Reply briefly: where the files
-are, that the word check passed, and the notes (judgement calls + typos left as written).
+**12. Deliver.** Write the files and the check report next to the original with `device_commit_files`
+(never overwrite the original), e.g. `True Love Ai Workflow/sample script - formatted.pdf`. Reply briefly:
+where the files are, the cross-check result in one line (e.g. "all 4 checks passed, 120/120 pages ✓, 2
+reviewers, 3 fixes"), and the notes (judgement calls, typos left as written, Telugu typo fixes).
 
 ## Format spec (what render.py produces)
 

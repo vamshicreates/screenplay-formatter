@@ -4,7 +4,7 @@
 V1 (dialogue only):
   telugu.py export <script.json> <lines.json>       list every dialogue line (index, speaker, text)
   telugu.py merge  <script.json> <te.json>          te.json = {"<index>": "<Telugu text>", ...}; adds "te"
-  telugu.py check  <script.json>                    validate the Telugu dialogue lines
+  telugu.py check  <script.json> [--report f.json]  validate the Telugu dialogue lines
 V2 (full Telugu — everything except character names), add --all to each command:
   export --all lists every element except character cues, plus title-page lines with keys
   "tp.title", "tp.center.<n>", "tp.contact.<n>"; merge accepts those keys; check --all validates all.
@@ -21,6 +21,8 @@ import json, re, sys, difflib
 
 TE = re.compile(r"[ఀ-౿]")
 LATIN = re.compile(r"[A-Za-z]")
+# a vowel sign / virama / anusvara with no letter before it renders as a dotted circle
+ORPHAN = re.compile(r"(?:^|[^\u0C00-\u0C7F\u200C\u200D])([\u0C00-\u0C03\u0C3E-\u0C56\u0C62\u0C63])")
 
 
 def words(s):
@@ -70,6 +72,7 @@ def main():
     cmd, path = sys.argv[1], sys.argv[2]
     full = "--all" in sys.argv
     args = [a for a in sys.argv[3:] if a != "--all"]
+    # (--report <path> is read by the check command)
     doc = json.load(open(path, encoding="utf-8"))
     els = doc["elements"]
     if cmd == "export":
@@ -98,6 +101,7 @@ def main():
         json.dump(doc, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         print(f"merged {n} Telugu lines into {path}")
     elif cmd == "check":
+        report = args[args.index("--report") + 1] if "--report" in args else None
         hard, review = [], []
         total = 0
         for k, en, te, lab in items(doc, full):
@@ -105,6 +109,8 @@ def main():
             te = te or ""
             if not te or not TE.search(te):
                 hard.append(f"#{k} ({lab}): no Telugu text — “{en[:60]}”"); continue
+            if ORPHAN.search(te):
+                hard.append(f"#{k} ({lab}): broken letter (vowel sign with no letter before it) — “{te[:60]}”")
             if LATIN.search(te):
                 hard.append(f"#{k} ({lab}): Latin letters left: {''.join(sorted(set(LATIN.findall(te))))} — “{te[:60]}”")
             ew, tw = words(en), words(te)
@@ -121,6 +127,12 @@ def main():
             print("ERROR  " + h)
         for r in review:
             print("REVIEW " + r)
+        if report:
+            import os
+            os.makedirs(os.path.dirname(report) or ".", exist_ok=True)
+            json.dump({"result": "FAIL" if hard else "PASS", "mode": "full" if full else "dialogue",
+                       "lines": total, "errors": hard, "review": review},
+                      open(report, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         if hard:
             print(f"FAIL — {len(hard)} error(s)"); sys.exit(1)
         print(f"PASS — all lines in Telugu letters; {len(review)} item(s) to review" if review else "PASS — all lines in Telugu letters, word for word")
