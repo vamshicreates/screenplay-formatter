@@ -221,6 +221,19 @@ def render(doc_json, out, telugu=False, scene_numbers=True, full=False):
     print(f"wrote {out}")
 
 
+def find_soffice():
+    """LibreOffice's command: on PATH (Linux), or inside the app bundle (macOS) / Program Files (Windows)."""
+    import shutil, os
+    for c in ("soffice", "libreoffice"):
+        if shutil.which(c):
+            return shutil.which(c)
+    for c in ("/Applications/LibreOffice.app/Contents/MacOS/soffice",
+              r"C:\Program Files\LibreOffice\program\soffice.exe"):
+        if os.path.exists(c):
+            return c
+    sys.exit("LibreOffice not found — install it (macOS: brew install --cask libreoffice) to make the PDF.")
+
+
 def to_pdf(data, docx_path, **kw):
     """PDF is rendered from a twin .docx set in Courier Prime (same 10-pitch metrics as
     Courier New, so pagination is identical) when that font is installed."""
@@ -229,13 +242,16 @@ def to_pdf(data, docx_path, **kw):
     final = pathlib.Path(docx_path).with_suffix(".pdf")
     tmp = pathlib.Path(tempfile.mkdtemp())
     twin = tmp / (final.stem + ".docx")
-    has_prime = "Courier Prime" in subprocess.run(["fc-list"], capture_output=True, text=True).stdout
+    try:
+        has_prime = "Courier Prime" in subprocess.run(["fc-list"], capture_output=True, text=True).stdout
+    except FileNotFoundError:           # macOS/Windows without fontconfig: trust the installed fonts
+        has_prime = True
     saved = FONT
     if has_prime:
         FONT = "Courier Prime"
     render(data, str(twin), **kw)
     FONT = saved
-    subprocess.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir", str(tmp), str(twin)],
+    subprocess.run([find_soffice(), "--headless", "--convert-to", "pdf", "--outdir", str(tmp), str(twin)],
                    check=True, capture_output=True)
     shutil.move(str(tmp / (final.stem + ".pdf")), str(final))
     pdf = str(final)
