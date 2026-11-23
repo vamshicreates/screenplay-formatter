@@ -33,11 +33,6 @@ Check, line by line against the original:
    action marked beside, or a short lead-in left on its own row where it clearly belongs to the speech,
    is kind `v3-layout`.
 
-7. **V4 (mode v4)**: there is no Telugu. The formatted text must be the writer's own words in English letters,
-   exactly as in the original (same spelling, even where it looks like a typo). Flag any Telugu script, any
-   changed, translated or "corrected" word, and any speaker name that differs from the original. Lines marked
-   `[V4: printed beside the next speech]` follow the same beside-the-speech rule as V3 (kind `v3-layout`).
-
 Only report real problems; matters of taste are not problems. Don't edit any files.
 Save your findings as JSON to **{OUT}**, as a list (an empty list `[]` if everything is right):
 

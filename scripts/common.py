@@ -98,7 +98,7 @@ def element_pages(doc, src_pages, out_owner, out_map):
     return page
 
 
-# ---------------------------------------------------------------- V3/V4 (two-column crew layout)
+# ---------------------------------------------------------------- V3 (Telugu two-column layout)
 def v3_heading(e):
     """('4.INT', 'KARTHIK ROOM/HALL', '-DAY/MORNING') from an English scene-heading element."""
     import re as _re
@@ -119,9 +119,8 @@ def _strip_brackets(s):
     return s[1:-1].strip() if s.startswith("(") and s.endswith(")") else s
 
 
-def v3_rows(doc, latin=False):
-    """Reading-order units of the V3 layout (latin=True: the V4 layout, same rows in the writer's own
-    English letters, with character names as written instead of "names_te"):
+def v3_rows(doc):
+    """Reading-order units of the V3 layout:
       {"kind": "heading", "cols": (left, loc, time), "idx": [i]}
       {"kind": "row", "left": str, "name": str, "dlg": str, "idx": [...]}     (action and/or speech)
       {"kind": "transition", "text": str, "idx": [i]}
@@ -129,8 +128,8 @@ def v3_rows(doc, latin=False):
     "v3_beside": true is printed in the left column beside the next speech; parentheticals of a speech
     go there too (brackets dropped). Everything else in the left column stands on its own row."""
     els = doc["elements"]
-    names = {} if latin else doc.get("names_te", {})
-    te = (lambda e: e["text"]) if latin else (lambda e: e.get("te") or e["text"])
+    names = doc.get("names_te", {})
+    te = lambda e: e.get("te") or e["text"]
     units, pending, speaker = [], [], None
     i = 0
     while i < len(els):
@@ -178,11 +177,11 @@ def v3_rows(doc, latin=False):
     return units
 
 
-def v3_layout(doc, latin=False):
+def v3_layout(doc):
     """v3_rows() with each transition folded into the row before it ("trans" key), so CUT TO: can never be
     stranded at the top of a page (a table row is never split). Used by both render.py and check_output.py."""
     out = []
-    for u in v3_rows(doc, latin):
+    for u in v3_rows(doc):
         if u["kind"] == "transition" and out and out[-1]["kind"] == "row" and "trans" not in out[-1]:
             out[-1] = dict(out[-1], trans=u["text"], idx=out[-1]["idx"] + u["idx"])
         else:

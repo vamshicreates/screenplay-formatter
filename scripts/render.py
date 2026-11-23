@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render script.json to an industry-standard screenplay .docx (and .pdf).
 
-Usage: render.py <script.json> <out.docx> [--telugu | --telugu-full | --v3 | --v4] [--pdf] [--no-scene-numbers]
+Usage: render.py <script.json> <out.docx> [--telugu | --telugu-full | --v3] [--pdf] [--no-scene-numbers]
 
 Format (US spec screenplay):
   Letter 8.5x11, Courier New 12 pt, 6 lines per inch (exactly 12 pt line pitch)
@@ -20,8 +20,6 @@ Cue+parenthetical+dialogue never split across pages; headings never end a page.
                ("4.INT   LOCATION   -TIME"), then action in Telugu on the left and "name :" + dialogue in
                Telugu on the right, an action that leads into a speech sitting beside it (see common.v3_rows).
                Needs "te" on every non-character element and doc["names_te"] for the character names.
---v4:          V4 — the same two-column crew layout with ALL text in English letters: the writer's own
-               words from script.json, character names as written ("SUGUNA :"). No Telugu step needed.
 """
 import json, re, sys, subprocess, pathlib
 from docx import Document
@@ -286,7 +284,7 @@ def v3_cell(cell, text, width, align=None):
             v3_text(p, line)
 
 
-def render_v3(doc_json, out, latin=False):
+def render_v3(doc_json, out):
     import sys as _s, os as _o
     _s.path.insert(0, _o.path.dirname(_o.path.abspath(__file__)))
     from common import v3_layout
@@ -303,9 +301,9 @@ def render_v3(doc_json, out, latin=False):
 
     tp = doc_json.get("title_page")
     if tp:
-        def pick(en, tt): return en if latin else (tt or en)
+        def pick(en, tt): return tt or en
         p = doc.add_paragraph(); v3_para_fmt(p, align=WD_ALIGN_PARAGRAPH.CENTER, before=230, line=22)
-        v3_text(p, pick(tp.get("title", "").upper() if latin else tp.get("title", ""), tp.get("title_te")), 16, 15, bold=True)
+        v3_text(p, pick(tp.get("title", ""), tp.get("title_te")), 16, 15, bold=True)
         cte = tp.get("center_te") or []
         for n, l in enumerate(tp.get("center", [])):
             p = doc.add_paragraph(); v3_para_fmt(p, align=WD_ALIGN_PARAGRAPH.CENTER, before=18)
@@ -331,7 +329,7 @@ def render_v3(doc_json, out, latin=False):
 
     table, missing = None, []
     first = True
-    for u in v3_layout(doc_json, latin):
+    for u in v3_layout(doc_json):
         if u["kind"] == "heading":
             table = None
             left, loc, time = u["cols"]
@@ -369,12 +367,11 @@ def render_v3(doc_json, out, latin=False):
                 v3_text(tp_, u["trans"])
             table = None if u.get("trans") else table
         first = False
-    if not latin:
-        for e in doc_json["elements"]:
-            if e["type"] != "character" and not e.get("te"):
-                missing.append(e["text"][:30])
-        for e in {e["text"] for e in doc_json["elements"] if e["type"] == "character"} - set(doc_json.get("names_te", {})):
-            missing.append("name " + e)
+    for e in doc_json["elements"]:
+        if e["type"] != "character" and not e.get("te"):
+            missing.append(e["text"][:30])
+    for e in {e["text"] for e in doc_json["elements"] if e["type"] == "character"} - set(doc_json.get("names_te", {})):
+        missing.append("name " + e)
     doc.save(out)
     if missing:
         print(f"WARNING: {len(missing)} item(s) without Telugu (English kept): {missing[:5]}")
@@ -396,8 +393,7 @@ def to_pdf(data, docx_path, **kw):
     saved = FONT
     if has_prime:
         FONT = "Courier Prime"
-    (render_v3(data, str(twin), latin=kw.get("latin", False)) if kw.get("v3")
-     else render(data, str(twin), **{k: v for k, v in kw.items() if k not in ("v3", "latin")}))
+    (render_v3(data, str(twin)) if kw.get("v3") else render(data, str(twin), **{k: v for k, v in kw.items() if k != "v3"}))
     FONT = saved
     subprocess.run([find_soffice(), "--headless", "--convert-to", "pdf", "--outdir", str(tmp), str(twin)],
                    check=True, capture_output=True)
@@ -412,10 +408,9 @@ if __name__ == "__main__":
     out = sys.argv[2]
     kw = dict(telugu="--telugu" in sys.argv, full="--telugu-full" in sys.argv,
               scene_numbers="--no-scene-numbers" not in sys.argv)
-    if "--v3" in sys.argv or "--v4" in sys.argv:
+    if "--v3" in sys.argv:
         kw["v3"] = True
-        kw["latin"] = "--v4" in sys.argv
-        render_v3(data, out, latin=kw["latin"])
+        render_v3(data, out)
     else:
         render(data, out, **kw)
     if "--pdf" in sys.argv:

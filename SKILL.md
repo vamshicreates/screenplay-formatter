@@ -1,6 +1,6 @@
 ---
 name: "screenplay-formatter"
-description: "Reformat a film script from the user's folder into standard screenplay format (.docx + .pdf) without changing a word, cross-checked page by page with independent review; Telugu modes: dialogue (V1), whole script (V2), the Telugu two-column crew layout (V3), or the same two-column layout all in English letters (V4)."
+description: "Reformat a film script from the user's folder into standard screenplay format (.docx + .pdf) without changing a word, cross-checked page by page with independent review; Telugu modes: dialogue (V1), whole script (V2), or the Telugu two-column crew layout (V3)."
 ---
 
 # Screenplay Formatter
@@ -9,7 +9,7 @@ The user points to a script file (PDF, DOCX, TXT or Fountain) in their Claude fo
 professional screenplay format. You produce a new version in industry-standard format, **with the
 writer's words exactly as they are**. You change format, never content.
 
-Five modes:
+Four modes:
 - **Standard** (default): formatted .docx + .pdf.
 - **Telugu V1 — dialogue only** (user asks for Telugu dialogue / Telugu letters / "version 1"): same,
   but every dialogue line written in Telugu script. This is a change of script, not a translation.
@@ -23,13 +23,8 @@ Five modes:
   `name :` + dialogue in the right columns. Character names are in **Telugu letters** too (`సుగుణ :`). An
   action that leads into a speech sits beside it on the same row, and short tone notes (parentheticals) go
   there too, without brackets. Same Telugu text as V2.
-- **V4 — two-column crew layout, English letters only** (user asks for "version 4", "V4", "English letters
-  only", "no Telugu script", "Tinglish two-column"): the same two-column layout as V3, but nothing is written in
-  Telugu script. Scene-heading bar, action, tone notes, dialogue and transitions are the writer's own words in
-  English letters, and character names are as written (`SUGUNA :`). No transliteration step, and no Telugu fonts
-  or `names_te` needed. It is built from `script.json`, so its words already passed the word check.
-  If the user says just "Telugu" and it's unclear which, ask V1, V2 or V3 (or V4 if they want English letters). If
-  they don't mention Telugu, make the standard version only and offer the Telugu versions and V4 in one line.
+  If the user says just "Telugu" and it's unclear which, ask V1, V2 or V3. If they don't mention Telugu,
+  make the standard version only and offer the Telugu versions in one line.
 
 ## The golden rule: modify, don't rewrite
 
@@ -156,17 +151,12 @@ the scene numbers (4, 7A) as they are; they print in the margins. Phone numbers,
 - `python3 $SK/scripts/telugu.py check script_v3.json --all --report checks/telugu-full.json` (this also checks
   `names_te`). The words are the same as V2, so no extra word check is needed.
 
-**6d. V4 (two-column, English letters)**: start from `script.json` (no Telugu steps). Save `script_v4.json` as a
-copy of it with `"v3_beside": true` on the same actions as V3 (copy them from `script_v3.json` if V3 was made;
-otherwise use the V3 rule above). Nothing else changes. Don't add `te` or `names_te`.
-
 **7. Render**
 ```bash
 python3 $SK/scripts/render.py script.json "out/<name> - formatted.docx" --pdf
 python3 $SK/scripts/render.py script_te.json "out/<name> - formatted (Telugu).docx" --telugu --pdf   # Telugu V1
 python3 $SK/scripts/render.py script_full.json "out/<name> - formatted (Full Telugu).docx" --telugu-full --pdf   # Telugu V2
 python3 $SK/scripts/render.py script_v3.json "out/<name> - formatted (V3).docx" --v3 --pdf   # Telugu V3
-python3 $SK/scripts/render.py script_v4.json "out/<name> - formatted (V4).docx" --v4 --pdf   # V4, English letters
 ```
 `--no-scene-numbers` if the original had no scene numbers and the user doesn't want them (the
 renderer only prints numbers that exist in the JSON anyway).
@@ -177,19 +167,17 @@ python3 $SK/scripts/check_output.py script.json "out/<name> - formatted.docx" --
 python3 $SK/scripts/check_output.py script_te.json "out/<name> - formatted (Telugu).docx" --mode te --report checks/output-te.json
 python3 $SK/scripts/check_output.py script_full.json "out/<name> - formatted (Full Telugu).docx" --mode full --report checks/output-full.json
 python3 $SK/scripts/check_output.py script_v3.json "out/<name> - formatted (V3).docx" --mode v3 --report checks/output-v3.json
-python3 $SK/scripts/check_output.py script_v4.json "out/<name> - formatted (V4).docx" --mode v4 --report checks/output-v4.json
 ```
 It re-opens the .docx and compares it paragraph by paragraph (V3: row by row of the two-column table) with
 the JSON, then compares the PDF's letters with the .docx. A failure names the exact missing or changed
 paragraph or row. V3 also fails if any script line doesn't land in exactly one row, or a name has no Telugu.
-V4 uses the same row check, and also fails if any Telugu script appears anywhere in the .docx.
 Re-render and re-check.
 
 **9. Independent review (cross-check 4).** Reviewers check your work without having seen it being done.
-- Make the packets from the richest version you produced (V3 > V4 > full Telugu > V1 > standard; V3 and V4 share the same rows and `v3_beside` flags). That one review
+- Make the packets from the richest version you produced (V3 > full Telugu > V1 > standard). That one review
   covers the shared English text and dialogue of the others:
   ```bash
-  python3 $SK/scripts/review_packets.py source.txt <script_v3.json|script_v4.json|script_full.json|script_te.json|script.json> checks/fidelity.json review --mode <v3|v4|full|te|en> --pages 12
+  python3 $SK/scripts/review_packets.py source.txt <script_v3.json|script_full.json|script_te.json|script.json> checks/fidelity.json review --mode <v3|full|te|en> --pages 12
   ```
   Run `check_fidelity.py ... --report` first on that same JSON (it gives each element's page).
 - Spawn **one reviewer per packet, all at once**, with the Agent tool (`subagent_type: general-purpose`,
@@ -232,7 +220,7 @@ page or the first script page.
 
 Name, parenthetical and dialogue are never split across pages. Headings and names keep with the next line.
 
-**V3 / V4 (two-column; V4 is the same layout with English letters, Arial 11 pt only):** US Letter, margins left 0.8", right 0.6", Arial 11 pt for English plus Noto Sans Telugu
+**V3 (two-column):** US Letter, margins left 0.8", right 0.6", Arial 11 pt for English plus Noto Sans Telugu
 12 pt, 17 pt line pitch, page numbers top right ("3", no dot), no (CONT'D). Heading bar: bold, `4.INT` at the left,
 location centred, `-TIME` at the right. Body: a borderless 3-column table per scene — action 2.95" | `name :`
 1.3" right-aligned | dialogue the rest. A row never splits across pages, and `CUT TO:` (Telugu) sits at the bottom
@@ -258,7 +246,6 @@ right of the scene's last row, so it can't be stranded on the next page.
 - Names: Karthik → కార్తీక్, Suguna → సుగుణ, Satyam → సత్యం (spoken spelling).
 - V1: only dialogue changes. Scene headings, action, character names (English CAPS) and parentheticals stay as they are.
 - V3: same Telugu text as V2, plus the character names in Telugu letters; scene headings stay English.
-- V4: no Telugu at all. Every line stays as the writer wrote it, in English letters, in the V3 layout.
 - V2: everything changes except the character names above dialogue. The same rules apply to every line:
   same words, sounds not translation, standard spelling of the intended word, the writer's word boundaries,
   punctuation and digits unchanged (500rs → 500రూ).
