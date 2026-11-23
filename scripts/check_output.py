@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-check 3 — did everything make it into the finished files?
 
-Usage: check_output.py <script.json> <out.docx> [--mode en|te|full|v3] [--report checks/output-<mode>.json]
+Usage: check_output.py <script.json> <out.docx> [--mode en|te|full|v3|v4] [--report checks/output-<mode>.json]
        (the .pdf next to the .docx is checked too, if present)
 
 .docx: re-opened and compared paragraph by paragraph with script.json — every element must appear,
@@ -10,6 +10,8 @@ Usage: check_output.py <script.json> <out.docx> [--mode en|te|full|v3] [--report
 V3:    the two-column layout is read row by row from the .docx tables (left | name : | dialogue) and
        compared with common.v3_rows(); every script line must land in exactly one row, and every
        character name must be in Telugu letters.
+V4:    the same two-column check with every row in English letters: the text comes straight from script.json,
+       character names are the writer's own, and any Telugu script anywhere in a row is a failure.
 .pdf:  must open and have pages; its letters (Telugu and English, spaces ignored) are counted and must
        match the .docx letter for letter, apart from page numbers. (PDF text extraction can reorder
        blocks and split Telugu words, so letters are compared as counts, not order.)
@@ -57,10 +59,10 @@ def docx_units(path):
     return units
 
 
-def check_v3(doc, docx_path):
+def check_v3(doc, docx_path, latin=False):
     from common import v3_layout
     problems = []
-    rows = v3_layout(doc)
+    rows = v3_layout(doc, latin)
     # every element in exactly one unit
     seen = {}
     for u in rows:
@@ -70,15 +72,16 @@ def check_v3(doc, docx_path):
         if seen.get(i, 0) != 1:
             problems.append(f"#{i} {e['type']} appears {seen.get(i, 0)} times in the V3 layout (must be once): “{e['text'][:50]}”")
     names = doc.get("names_te", {})
-    for n in sorted({e["text"] for e in doc["elements"] if e["type"] == "character"}):
-        if not re.search(r"[\u0C00-\u0C7F]", names.get(n, "")) or re.search(r"[A-Za-z]", names.get(n, "")):
-            problems.append(f"character name {n}: needs Telugu letters in names_te (has “{names.get(n, '')}”)")
+    if not latin:
+        for n in sorted({e["text"] for e in doc["elements"] if e["type"] == "character"}):
+            if not re.search(r"[\u0C00-\u0C7F]", names.get(n, "")) or re.search(r"[A-Za-z]", names.get(n, "")):
+                problems.append(f"character name {n}: needs Telugu letters in names_te (has “{names.get(n, '')}”)")
     exp = []
     tp = doc.get("title_page")
     if tp:
-        exp.append(tp.get("title_te") or tp.get("title", ""))
+        exp.append(tp.get("title", "") if latin else (tp.get("title_te") or tp.get("title", "")))
         for part in ("center", "contact"):
-            tes = tp.get(part + "_te") or []
+            tes = [] if latin else (tp.get(part + "_te") or [])
             exp += [(tes[n] if n < len(tes) and tes[n] else l) for n, l in enumerate(tp.get(part, []))]
     for u in rows:
         if u["kind"] == "heading":
@@ -104,9 +107,16 @@ def check_v3(doc, docx_path):
                 problems.append(f"EXTRA row in .docx: “{got[k].replace(chr(31), ' | ')[:80]}”")
     for u in rows:
         if u["kind"] == "row":
-            for part in (u["left"], u["dlg"]):
-                if part and not re.search(r"[\u0C00-\u0C7F]", part):
+            for part in (u["left"], u["dlg"], u["name"]):
+                if latin and part and re.search(r"[\u0C00-\u0C7F]", part):
+                    problems.append(f"row {u['idx']}: Telugu script found, V4 must be English letters only: “{part[:50]}”")
+                elif not latin and part is not u["name"] and part and not re.search(r"[\u0C00-\u0C7F]", part):
                     problems.append(f"row {u['idx']}: text not in Telugu letters: “{part[:50]}”")
+    if latin:
+        for got_text in got:
+            if re.search(r"[\u0C00-\u0C7F]", got_text):
+                problems.append(f"V4 .docx contains Telugu script: “{got_text.replace(chr(31), ' | ')[:60]}”")
+                break
     return got, exp, problems
 
 
@@ -118,14 +128,15 @@ def main():
     docx_path = args[1]
     import docx
     problems = []
-    if mode == "v3":
-        paras, exp, problems = check_v3(doc, docx_path)
+    two_col = mode in ("v3", "v4")
+    if two_col:
+        paras, exp, problems = check_v3(doc, docx_path, latin=(mode == "v4"))
     else:
         paras = [p.text for p in docx.Document(docx_path).paragraphs if p.text.strip()]
         exp = expected_paragraphs(doc, mode)
 
     EXT = r"\((?:CONT'?D|V\.?O\.?|O\.?S\.?|O\.?C\.?)\)"
-    if mode == "v3":
+    if two_col:
         G = W = []
 
     def norm_got(t):
@@ -137,8 +148,8 @@ def main():
     def norm_want(item):
         return tuple(toks(re.sub(EXT, " ", item[1], flags=re.I)))
 
-    G = [norm_got(t) for t in paras] if mode != "v3" else []
-    W = [norm_want(it) for it in exp] if mode != "v3" else []
+    G = [norm_got(t) for t in paras] if not two_col else []
+    W = [norm_want(it) for it in exp] if not two_col else []
     import difflib
     sm = difflib.SequenceMatcher(a=W, b=G, autojunk=False)
     for op, a1, a2, b1, b2 in sm.get_opcodes():
@@ -177,7 +188,7 @@ def main():
             offset = 1 if doc.get("title_page") else 0
             for pk, pg in enumerate(ptxt.split("\f"), start=1):        # drop the page number printed at the top
                 sp_ = pk - offset                                          # script page number
-                has_hdr = sp_ >= 1 and (mode == "v3" or sp_ >= 2)          # en/te/full: none on script page 1
+                has_hdr = sp_ >= 1 and (two_col or sp_ >= 2)          # en/te/full: none on script page 1
                 ls = pg.split("\n")
                 for k, l in enumerate(ls):
                     if l.strip():
