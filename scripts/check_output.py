@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-check 3 — did everything make it into the finished files?
 
-Usage: check_output.py <script.json> <out.docx> [--mode en|te|full|v3] [--report checks/output-<mode>.json]
+Usage: check_output.py <script.json> <out.docx> [--mode en|te|full|v3|v4] [--report checks/output-<mode>.json]
        (the .pdf next to the .docx is checked too, if present)
 
 .docx: re-opened and compared paragraph by paragraph with script.json — every element must appear,
@@ -10,6 +10,8 @@ Usage: check_output.py <script.json> <out.docx> [--mode en|te|full|v3] [--report
 V3:    the two-column layout is read row by row from the .docx tables (left | name : | dialogue) and
        compared with common.v3_rows(); every script line must land in exactly one row, and every
        character name must be in Telugu letters.
+V4:    the V1 layout with English letters only: checked like the standard version, and it fails if any
+       Telugu script appears anywhere in the .docx.
 .pdf:  must open and have pages; its letters (Telugu and English, spaces ignored) are counted and must
        match the .docx letter for letter, apart from page numbers. (PDF text extraction can reorder
        blocks and split Telugu words, so letters are compared as counts, not order.)
@@ -161,6 +163,11 @@ def main():
                 continue
             if not re.search(r"[\u0C00-\u0C7F]", item[1]):
                 problems.append(f"{item[0]}: should be in Telugu letters but has no Telugu text")
+    if mode == "v4":
+        for t in paras:
+            if re.search(r"[\u0C00-\u0C7F]", t):
+                problems.append(f"Telugu script found, V4 must be English letters only: “{t[:70]}”")
+                break
     docx_ok = not problems
 
     pdf_path = os.path.splitext(docx_path)[0] + ".pdf"

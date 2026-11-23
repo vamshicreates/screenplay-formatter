@@ -4,7 +4,7 @@
 Usage: report.py <checks dir> <out.txt> [--title "sample script"]
 
 Reads (whichever exist): pages.json, fidelity.json, telugu-te.json, telugu-full.json,
-output-en.json, output-te.json, output-full.json, review.json
+output-en.json, output-te.json, output-full.json, output-v3.json, output-v4.json, review.json
 review.json = {"reviewers": N, "packets": [...], "findings": [{..., "action": "fixed"|"rejected", "note": "..."}]}
 """
 import json, os, sys, datetime
@@ -33,7 +33,7 @@ def main():
     for m, lab in (("te", "Telugu V1 lines"), ("full", "Telugu V2/V3 lines")):
         t = load(d, f"telugu-{m}.json")
         if t: summary.append((f"3. {lab} complete & clean", t["result"]))
-    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2"), ("v3", "Telugu V3")):
+    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2"), ("v3", "Telugu V3"), ("v4", "V4 English letters")):
         o = load(d, f"output-{m}.json")
         if o: summary.append((f"4. Finished files complete ({lab})", o["result"]))
     rev = load(d, "review.json")
@@ -73,7 +73,7 @@ def main():
             for r in dict.fromkeys(t["review"]):
                 L.append(f"  flag checked, OK: {r.split(' — sounds')[0]}")
             L.append("")
-    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2"), ("v3", "Telugu V3")):
+    for m, lab in (("en", "standard"), ("te", "Telugu V1"), ("full", "Telugu V2"), ("v3", "Telugu V3"), ("v4", "V4 English letters")):
         o = load(d, f"output-{m}.json")
         if o:
             pg = o.get("pdf", {}).get("pages", "–")

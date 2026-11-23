@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render script.json to an industry-standard screenplay .docx (and .pdf).
 
-Usage: render.py <script.json> <out.docx> [--telugu | --telugu-full | --v3] [--pdf] [--no-scene-numbers]
+Usage: render.py <script.json> <out.docx> [--telugu | --telugu-full | --v3 | --v4] [--pdf] [--no-scene-numbers]
 
 Format (US spec screenplay):
   Letter 8.5x11, Courier New 12 pt, 6 lines per inch (exactly 12 pt line pitch)
@@ -20,6 +20,8 @@ Cue+parenthetical+dialogue never split across pages; headings never end a page.
                ("4.INT   LOCATION   -TIME"), then action in Telugu on the left and "name :" + dialogue in
                Telugu on the right, an action that leads into a speech sitting beside it (see common.v3_rows).
                Needs "te" on every non-character element and doc["names_te"] for the character names.
+--v4:          V4 — the V1 (standard screenplay) layout with ALL text in English letters: the writer's own
+               words from script.json, dialogue included, nothing in Telugu script. No Telugu step needed.
 """
 import json, re, sys, subprocess, pathlib
 from docx import Document
@@ -408,6 +410,10 @@ if __name__ == "__main__":
     out = sys.argv[2]
     kw = dict(telugu="--telugu" in sys.argv, full="--telugu-full" in sys.argv,
               scene_numbers="--no-scene-numbers" not in sys.argv)
+    if "--v4" in sys.argv:                     # V4 = V1 layout, English letters: the plain render, no "te" text used
+        if any(re.search(r"[\u0C00-\u0C7F]", e.get("text", "")) for e in data["elements"]):
+            sys.exit("V4 needs English letters, but script.json has Telugu script in its text.")
+        kw.update(telugu=False, full=False)
     if "--v3" in sys.argv:
         kw["v3"] = True
         render_v3(data, out)
